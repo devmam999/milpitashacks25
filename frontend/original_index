@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mental Health Scale</title>
+  <style>
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      font-family: 'Courier New', monospace;
+      background-color: #0d0d0d;
+      color: #e0f7fa;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: linear-gradient(90deg, #0f2027, #203a43, #2c5364);
+      color: #00ffff;
+      padding: 1rem;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0, 255, 255, 0.2);
+    }
+
+    nav {
+      margin-top: 0.5rem;
+    }
+
+    nav a {
+      color: #00ffff;
+      margin: 0 1rem;
+      text-decoration: none;
+      font-weight: bold;
+      transition: color 0.3s;
+    }
+
+    nav a:hover {
+      color: #ffffff;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+      background: radial-gradient(circle at center, #1a1a1a, #000000);
+      flex-direction: column;
+    }
+
+    .hero h1 {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      color: #00e5ff;
+      text-shadow: 0 0 8px #00ffff;
+    }
+
+    .hero p {
+      font-size: 1.2rem;
+      margin-bottom: 1.5rem;
+      color: #b2ebf2;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background-color: #00bcd4;
+      color: #000;
+      text-decoration: none;
+      border-radius: 4px;
+      font-weight: bold;
+      box-shadow: 0 0 10px #00e5ff;
+      transition: background-color 0.3s, color 0.3s;
+      margin-top: 1rem;
+    }
+
+    .btn:hover {
+      background-color: #00e5ff;
+      color: #000;
+    }
+
+    /* Camera video styles */
+    #camera {
+      margin-top: 1rem;
+      border-radius: 8px;
+      max-width: 100%;
+      width: 400px;
+      box-shadow: 0 0 15px #00e5ff;
+    }
+    #snapshot {
+        display: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mental Health Scale</h1>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <h1>Camera Feed</h1>
+      <p>This is an AI that can detect your current mental health
+status, and give you personal recommendations!</p>
+      <video id="camera" autoplay playsinline></video>
+      <canvas id="snapshot"></canvas>
+        <div class="button-container">
+            <a href="#" class="btn" id="detectBtn">Detect Now</a>
+        </div>
+    </div>
+  </main>
+
+  <script>
+    async function startCamera() {
+      const video = document.getElementById('camera');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+video: true, audio: false });
+        video.srcObject = stream;
+      } catch (err) {
+        alert('Could not access the camera. Please allow camera permissions.');
+        console.error(err);
+      }
+    }
+    // Function to capture a still frame from the video feed as a base64 JPEG image string
+    function captureFrame() {
+        const video = document.getElementById('camera'); // Get the video element
+        const canvas = document.getElementById('snapshot'); // Get the hidden canvas element
+        const context = canvas.getContext('2d'); // Get the 2D drawing context
+
+        // Set the canvas size to match the video resolution
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        // Draw the current video frame onto the canvas
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Convert the canvas content to a base64-encoded JPEG image string and return it
+        return canvas.toDataURL('image/jpeg');
+    }
+
+    // Add a click event listener to the "Detect Now" button
+    document.getElementById('detectBtn').addEventListener('click', async (e) => {
+    e.preventDefault();
+
+    // Capture frame as base64 data URL
+    const imageDataUrl = captureFrame();
+
+    // Convert base64 URL to Blob (binary image data)
+    function dataURLtoBlob(dataurl) {
+      const arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1];
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      return new Blob([u8arr], { type: mime });
+    }
+
+    const imageBlob = dataURLtoBlob(imageDataUrl);
+
+    // Create FormData and append the file with the key "file" (must match backend parameter)
+    const formData = new FormData();
+    formData.append('file', imageBlob, 'snapshot.jpg');
+
+    try {
+      const response = await fetch('http://localhost:5000/analyze-emotion/', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not OK');
+      }
+
+      const result = await response.json();
+      console.log(result)
+
+      alert(`Emotion: ${result.emotion}\nScore: ${result.score}\nDistress: ${result.distress}`);
+
+    } catch (error) {
+      console.error('Error sending image:', error);
+      alert('There was an error analyzing your image.');
+    }
+});
+
+
+
+    startCamera();
+  </script>
+</body>
+</html>

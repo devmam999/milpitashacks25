@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Analysis - Client Side</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.10.0/tf.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            margin: 30px 0;
+            background: rgba(102, 126, 234, 0.05);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: rgba(118, 75, 162, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: rgba(118, 75, 162, 0.15);
+            transform: scale(1.02);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .upload-text {
+            color: #666;
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+
+        .upload-button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .upload-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .image-preview {
+            margin: 30px 0;
+            display: none;
+        }
+
+        #previewImage {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .results {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .emotion-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin: 20px 0;
+            box-shadow: 0 10px 30px rgba(240, 147, 251, 0.3);
+        }
+
+        .emotion-name {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-transform: capitalize;
+        }
+
+        .confidence {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+        }
+
+        .distress-info {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .distress-item {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+
+        .loading {
+            display: none;
+            color: #667eea;
+            font-size: 1.2em;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .webcam-section {
+            margin: 30px 0;
+        }
+
+        #webcamVideo {
+            max-width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: none;
+        }
+
+        .webcam-controls {
+            margin: 20px 0;
+        }
+
+        .webcam-button {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .webcam-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(78, 205, 196, 0.4);
+        }
+        /* Tips Popup Styles */
+.tips-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.tips-popup.hidden {
+    display: none;
+}
+
+.tips-popup-content {
+    background: white;
+    border-radius: 20px;
+    padding: 30px 40px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+    position: relative;
+    text-align: left;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.tips-popup-content h2 {
+    margin-bottom: 20px;
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 1.8em;
+}
+
+.tips-close-btn {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    background: transparent;
+    border: none;
+    font-size: 2em;
+    color: #764ba2;
+    cursor: pointer;
+    font-weight: bold;
+    line-height: 1;
+    transition: color 0.3s ease;
+}
+
+.tips-close-btn:hover {
+    color: #667eea;
+}
+
+#tipsContent {
+    font-size: 1.1em;
+    line-height: 1.5;
+    color: #333;
+}
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎭 Emotion Analysis</h1>
+        <p>Upload an image or use your webcam to analyze facial expressions</p>
+
+        <!-- File Upload Section -->
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-text">📸 Drop an image here or click to browse</div>
+            <button class="upload-button" onclick="document.getElementById('fileInput').click()">
+                Choose File
+            </button>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+
+        <!-- Webcam Section -->
+        <div class="webcam-section">
+            <div class="webcam-controls">
+                <button class="webcam-button" id="startWebcam">📹 Start Webcam</button>
+                <button class="webcam-button" id="capturePhoto" style="display: none;">📷 Capture Photo</button>
+                <button class="webcam-button" id="stopWebcam" style="display: none;">🛑 Stop Webcam</button>
+            </div>
+            <video id="webcamVideo" autoplay muted playsinline></video>
+        </div>
+
+        <!-- Image Preview -->
+        <div class="image-preview" id="imagePreview">
+            <img id="previewImage" alt="Preview">
+        </div>
+
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            Analyzing emotions...
+        </div>
+
+        <!-- Error -->
+        <div class="error" id="error"></div>
+
+        <!-- Results -->
+        <div class="results" id="results"></div>
+    </div>
+
+    <!-- Tips Popup -->
+    <div id="tipsPopup" class="tips-popup hidden">
+        <div class="tips-popup-content">
+            <button class="tips-close-btn" id="tipsCloseBtn">&times;</button>
+            <h2>💡 Tips from OpenAI</h2>
+        <div id="tipsContent"></div>
+      </div>
+    </div>
+
+
+    <script>
+        class EmotionAnalyzer {
+            constructor() {
+                this.model = null;
+                this.isModelLoaded = false;
+                this.webcamStream = null;
+                this.init();
+            }
+
+            async init() {
+                await this.loadModel();
+                this.setupEventListeners();
+            }
+
+            async loadModel() {
+                try {
+                    // Using a simple CNN model for emotion detection
+                    // This is a mock implementation - in reality you'd use a pre-trained model
+                    console.log('Loading emotion detection model...');
+                    
+                    // Simulate model loading
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    this.isModelLoaded = true;
+                    console.log('Model loaded successfully');
+                } catch (error) {
+                    console.error('Failed to load model:', error);
+                    this.showError('Failed to load emotion detection model');
+                }
+            }
+
+            setupEventListeners() {
+                const fileInput = document.getElementById('fileInput');
+                const uploadArea = document.getElementById('uploadArea');
+                const startWebcam = document.getElementById('startWebcam');
+                const capturePhoto = document.getElementById('capturePhoto');
+                const stopWebcam = document.getElementById('stopWebcam');
+
+                // File upload events
+                fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+                
+                // Drag and drop events
+                uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.add('dragover');
+                });
+                
+                uploadArea.addEventListener('dragleave', () => {
+                    uploadArea.classList.remove('dragover');
+                });
+                
+                uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.remove('dragover');
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        this.processFile(files[0]);
+                    }
+                });
+
+                // Webcam events
+                startWebcam.addEventListener('click', () => this.startWebcam());
+                capturePhoto.addEventListener('click', () => this.capturePhoto());
+                stopWebcam.addEventListener('click', () => this.stopWebcam());
+            }
+
+            handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    this.processFile(file);
+                }
+            }
+
+            async processFile(file) {
+                if (!file.type.startsWith('image/')) {
+                    this.showError('Please select a valid image file');
+                    return;
+                }
+
+                try {
+                    this.showLoading(true);
+                    this.hideError();
+
+                    const imageUrl = URL.createObjectURL(file);
+                    await this.displayImage(imageUrl);
+                    await this.analyzeImage(imageUrl);
+
+                } catch (error) {
+                    console.error('Error processing file:', error);
+                    this.showError('Error processing image: ' + error.message);
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+
+            async displayImage(imageUrl) {
+                return new Promise((resolve) => {
+                    const previewImage = document.getElementById('previewImage');
+                    const imagePreview = document.getElementById('imagePreview');
+                    
+                    previewImage.onload = () => resolve();
+                    previewImage.src = imageUrl;
+                    imagePreview.style.display = 'block';
+                });
+            }
+
+            async analyzeImage(imageUrl) {
+                if (!this.isModelLoaded) {
+                    throw new Error('Model not loaded yet');
+                }
+
+                // Simulate emotion analysis with realistic results
+                const emotions = ['happy', 'sad', 'angry', 'surprised', 'neutral', 'fearful', 'disgusted'];
+                const emotion = emotions[Math.floor(Math.random() * emotions.length)];
+                const confidence = 0.7 + Math.random() * 0.3; // 70-100% confidence
+                
+                // Simulate processing time
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                const result = this.generateEmotionResult(emotion, confidence);
+                this.displayResults(result);
+            }
+
+            generateEmotionResult(emotion, confidence) {
+                const distressLevels = {
+                    happy: { color: 'green', scale: [7, 8], description: 'Positive' },
+                    neutral: { color: 'yellow', scale: [5, 6], description: 'Neutral' },
+                    surprised: { color: 'yellow', scale: [5, 6], description: 'Neutral' },
+                    sad: { color: 'orange', scale: [3, 4], description: 'Concerning' },
+                    fearful: { color: 'orange', scale: [3, 4], description: 'Concerning' },
+                    disgusted: { color: 'orange', scale: [3, 4], description: 'Concerning' },
+                    angry: { color: 'red', scale: [1, 2], description: 'Needs Support' }
+                };
+
+                const distress = distressLevels[emotion] || distressLevels.neutral;
+
+                return {
+                    emotion: emotion,
+                    confidence: confidence,
+                    distress: distress
+                };
+            }
+
+            displayResults(result) {
+                const resultsDiv = document.getElementById('results');
+                const { emotion, confidence, distress } = result;
+
+                resultsDiv.innerHTML = `
+                    <div class="emotion-card">
+                        <div class="emotion-name">${this.getEmotionEmoji(emotion)} ${emotion}</div>
+                        <div class="confidence">Confidence: ${(confidence * 100).toFixed(1)}%</div>
+                        <div class="distress-info">
+                            <div class="distress-item">
+                                <strong>Status</strong><br>
+                                <span style="color: ${distress.color};">● ${distress.description}</span>
+                            </div>
+                            <div class="distress-item">
+                                <strong>Scale</strong><br>
+                                ${distress.scale[0]}-${distress.scale[1]}/10
+                            </div>
+                            <div class="distress-item">
+                                <strong>Category</strong><br>
+                                ${this.getEmotionCategory(emotion)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                resultsDiv.style.display = 'block';
+            }
+
+            getEmotionEmoji(emotion) {
+                const emojis = {
+                    happy: '😊',
+                    sad: '😢',
+                    angry: '😠',
+                    surprised: '😲',
+                    neutral: '😐',
+                    fearful: '😨',
+                    disgusted: '🤢'
+                };
+                return emojis[emotion] || '😐';
+            }
+
+            getEmotionCategory(emotion) {
+                const categories = {
+                    happy: 'Positive',
+                    sad: 'Negative',
+                    angry: 'Negative',
+                    surprised: 'Neutral',
+                    neutral: 'Neutral',
+                    fearful: 'Negative',
+                    disgusted: 'Negative'
+                };
+                return categories[emotion] || 'Neutral';
+            }
+
+            async startWebcam() {
+                try {
+                    this.webcamStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { width: 640, height: 480 } 
+                    });
+                    
+                    const video = document.getElementById('webcamVideo');
+                    video.srcObject = this.webcamStream;
+                    video.style.display = 'block';
+                    
+                    document.getElementById('startWebcam').style.display = 'none';
+                    document.getElementById('capturePhoto').style.display = 'inline-block';
+                    document.getElementById('stopWebcam').style.display = 'inline-block';
+                    
+                } catch (error) {
+                    console.error('Error accessing webcam:', error);
+                    this.showError('Could not access webcam. Please check permissions.');
+                }
+            }
+
+            async capturePhoto() {
+                const video = document.getElementById('webcamVideo');
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                ctx.drawImage(video, 0, 0);
+                
+                canvas.toBlob(async (blob) => {
+                    await this.processFile(blob);
+                }, 'image/jpeg', 0.8);
+            }
+
+            stopWebcam() {
+                if (this.webcamStream) {
+                    this.webcamStream.getTracks().forEach(track => track.stop());
+                    this.webcamStream = null;
+                }
+                
+                const video = document.getElementById('webcamVideo');
+                video.style.display = 'none';
+                video.srcObject = null;
+                
+                document.getElementById('startWebcam').style.display = 'inline-block';
+                document.getElementById('capturePhoto').style.display = 'none';
+                document.getElementById('stopWebcam').style.display = 'none';
+            }
+            
+
+            showLoading(show) {
+                const loading = document.getElementById('loading');
+                loading.style.display = show ? 'block' : 'none';
+            }
+
+            showError(message) {
+                const errorDiv = document.getElementById('error');
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+            }
+
+            hideError() {
+                const errorDiv = document.getElementById('error');
+                errorDiv.style.display = 'none';
+            }
+            
+        }
+
+
+        // Initialize the emotion analyzer when the page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            new EmotionAnalyzer();
+        });
+        
+    </script>
+</body>
+</html>

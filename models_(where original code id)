@@ -1,0 +1,121 @@
+import os
+from fastapi import UploadFile
+import numpy as np
+import cv2
+from fer import FER
+from PIL import Image
+
+# Initialize FER detector
+detector = FER(mtcnn=True)
+
+# Emotion severity scale
+distress_levels = {
+    'happy': {'color': 'green', 'scale': (7, 8), 'description': 'Positive'},
+    'neutral': {'color': 'yellow', 'scale': (5, 6), 'description': 'Neutral'},
+    'surprise': {'color': 'yellow', 'scale': (5, 6), 'description': 'Neutral'},
+    'sad': {'color': 'orange', 'scale': (3, 4), 'description': 'Concerning'},
+    'fear': {'color': 'orange', 'scale': (3, 4), 'description': 'Concerning'},
+    'disgust': {'color': 'orange', 'scale': (3, 4), 'description': 'Concerning'},
+    'angry': {'color': 'red', 'scale': (1, 2), 'description': 'Needs Support'}
+}
+
+def show_tip(tip: str):
+    print(f"💡 Tip: {tip}")
+
+# Load image from upload
+async def load_image_from_upload(file: UploadFile):
+    print("DEBUG: Reading uploaded file")
+    contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if image is None:
+        raise ValueError("Failed to decode image.")
+    print("DEBUG: Successfully loaded and decoded image")
+    return image
+
+# Perform emotion detection
+def detect_faces_and_emotions(image):
+    print("DEBUG: Entered detect_faces_and_emotions")
+
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    pil_image = Image.fromarray(rgb_image)
+    faces = detector.detect_emotions(pil_image)
+
+    if not faces:
+        print("DEBUG: No faces detected. Ensure the image is clear and has a visible face.")
+
+    print(f"DEBUG: Detected {len(faces)} face(s)")
+
+
+    results = []
+
+    for face_data in faces:
+        box = face_data.get("box")
+        if not box or len(box) != 4:
+            print(f"Invalid box format: {box}")
+            continue
+
+        x, y, w, h = box
+        emotions = face_data.get("emotions", {})
+
+        if not emotions:
+            emotion, score = 'neutral', 0.5
+            severity_info = distress_levels['neutral']
+        else:
+            try:
+                emotion = max(emotions, key=emotions.get)
+                score = emotions[emotion]
+            except Exception as e:
+                print(f"Error determining dominant emotion: {e}")
+                emotion, score = 'neutral', 0.5
+
+            if emotion == 'happy' and score >= 0.9:
+                severity_info = {'color': 'blue', 'scale': (9, 10), 'description': 'Very Positive'}
+            else:
+                severity_info = distress_levels.get(emotion, {'color': 'yellow', 'scale': (5, 6), 'description': 'Neutral'})
+
+        if severity_info['color'] == 'red':
+            show_tip("Try deep breathing: Inhale 4s, hold 4s, exhale 4s.")
+
+        results.append({
+            "face_location": {"top": y, "right": x + w, "bottom": y + h, "left": x},
+            "emotion": emotion,
+            "score": float(score),
+            "severity_color": severity_info['color'],
+            "severity_scale": tuple(int(s) for s in severity_info['scale']),
+            "severity_description": severity_info['description']
+        })
+
+    return results
+
+# Summarize result
+def analyze_emotion(image):
+    print("DEBUG: analyze_emotion called")
+
+    results = detect_faces_and_emotions(image)
+    print("DEBUG: Results =", results)
+
+    if not results:
+        print("DEBUG: No face detected.")
+        return "no face", 0.0, {"color": "gray", "scale": (0, 0), "description": "No face detected"}
+
+    first_face = results[0]
+    emotion = first_face.get("emotion")
+    score = first_face.get("score")
+    distress = {
+        "color": first_face.get("severity_color"),
+        "scale": first_face.get("severity_scale"),
+        "description": first_face.get("severity_description")
+    }
+
+    return str(emotion), float(score), distress
+
+# Endpoint logic
+async def process_uploaded_image(file: UploadFile):
+    try:
+        image = await load_image_from_upload(file)
+        results = detect_faces_and_emotions(image)
+        return {"faces": results}
+    except Exception as e:
+        print(f"❌ Error processing image: {e}")
+        return {"error": str(e)}
